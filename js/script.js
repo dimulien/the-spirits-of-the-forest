@@ -84,7 +84,7 @@ const applyShadow = function() {
 }
 
 const addShadowToHexagon = function(hexagon) {
-    let imageUrl = `../images/shadow-200.png`;
+    let imageUrl = `./images/shadow-200.png`;
 
         shadowSprite = PIXI.Sprite.from(imageUrl);
         shadowSprite.anchor.set(0.5);
