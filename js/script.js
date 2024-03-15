@@ -5,6 +5,10 @@
  *          4. DONE: Add checking of the rules: distance of ceeding
  *          5. Improve UX: visibility of actions, gathering sun, spending sun animation, etc.
  *          6. DONE: Implement busy state of a tree (a tree can do only one action per round)
+ *          7. DONE: Control player turn. Don't allow to make a move wrong player.
+ *          8. DONE: Add Wait action to skip turn
+ *          9. DONE: Change round, when both players waiting
+ *          10. Reorder tree and shadow, if level of tree is higher than shadow
  */ 
 
 let app = new PIXI.Application({
@@ -28,6 +32,10 @@ var currentRound = 1;
 var nutrients = 20;
 const COMPLETE_PRICE = 4;
 var sunDirection = 0;
+var currentPlayer = 0;
+var isPlayer1Waiting = false;
+var isPlayer2Waiting = false;
+
 
 window.onload = function() {
     document.body.appendChild(app.view);
@@ -48,14 +56,35 @@ window.onload = function() {
     renderRounds();
     renderSun();
     addTreeDescription();
+    showWhoseMove();
+}
+
+const showWhoseMove = function() {
+    let existedWhoseMove = app.stage.getChildByName('whoseMove');
+    app.stage.removeChild(existedWhoseMove);
+
+    let imageUrl = `./images/whose-move.png`;
+
+    let whoseMove = PIXI.Sprite.from(imageUrl);
+    whoseMove.anchor.set(0.5);
+
+    whoseMove.x = 285 + currentPlayer * 1805;
+    whoseMove.y = 530;
+    whoseMove.name = 'whoseMove';
+    app.stage.addChild(whoseMove);
 }
 
 const clearShadow = function () {
     for (let index = 0; index < CELLS_NUMBER; index++) {
         let hexagon = getHexagonById(index);
         hexagon.shadowSize = 0;
-        let shadow = hexagon.getChildByName('shadow')
-        hexagon.removeChild(shadow);
+        while (true) {
+            let shadow = hexagon.getChildByName('shadow')
+            if (!shadow) {
+                break;
+            }
+            hexagon.removeChild(shadow);
+        }
 
         let sleep = hexagon.getChildByName('sleep');
         hexagon.removeChild(sleep);
@@ -90,6 +119,9 @@ const addShadowToHexagon = function(hexagon) {
         shadowSprite.anchor.set(0.5);
         shadowSprite.alpha = 0.35;
 
+        shadowSprite.zIndex = hexagon.shadowSize >= hexagon.treeSize ? 100 : 0;
+        
+
         shadowSprite.name = 'shadow';
         hexagon.addChild(shadowSprite);
 }
@@ -118,6 +150,23 @@ const addDescription = function() {
     player1Description.position = {x: 220, y: 180};
     app.stage.addChild(player1Description);
 
+    const player1Waiting = new PIXI.Text('WAIT', {
+        fontFamily: 'Arial',
+        fontSize: 32,
+        fill: 0x10F010,
+        align: 'center',
+    });
+    player1Waiting.position = {x: 220, y: 290};
+    player1Waiting.onclick = (e) => { 
+        isPlayer1Waiting = true;
+        changePlayerTurn();
+    };
+    
+    player1Waiting.eventMode = "static";
+    player1Waiting.cursor = "pointer";
+    
+    app.stage.addChild(player1Waiting);
+
     const costTrees1 = new PIXI.Text('Prices', {
         fontFamily: 'Arial',
         fontSize: 32,
@@ -136,6 +185,24 @@ const addDescription = function() {
     player2Description.position = {x: 2020, y: 180};
     app.stage.addChild(player2Description);
 
+    const player2Waiting = new PIXI.Text('WAIT', {
+        fontFamily: 'Arial',
+        fontSize: 32,
+        fill: 0x10F010,
+        align: 'center',
+    });
+    player2Waiting.position = {x: 2020, y: 290};
+    player2Waiting.onclick = () => {
+        isPlayer2Waiting = true;
+        changePlayerTurn();
+    };
+    
+    player2Waiting.eventMode = "static";
+    player2Waiting.cursor = "pointer";
+    
+    app.stage.addChild(player2Waiting);
+
+
     const costTrees2 = new PIXI.Text('Prices', {
         fontFamily: 'Arial',
         fontSize: 32,
@@ -144,22 +211,20 @@ const addDescription = function() {
     });
     costTrees2.position = {x: 2020, y: 360};
     app.stage.addChild(costTrees2);
+}
 
-    const nextButton = new PIXI.Text('NEXT ROUND', {
-        fontFamily: 'Arial',
-        fontSize: 32,
-        fill: 0x101010,
-        align: 'center',
-    });
-    nextButton.position = {x: 1020, y: 20};
-    nextButton.onclick = nextRound;
+const wait = function(playerId) {
+    // TODO
     
-    nextButton.eventMode = "static";
-    nextButton.cursor = "pointer";
-    
-    app.stage.addChild(nextButton);
+    let sleepPlayerImage = `./images/sleep.png`;
+    let sleepSprite = PIXI.Sprite.from(sleepPlayerImage);
+    sleepSprite.anchor.set(0.5);
+    sleepSprite.name = `sleep-${playerId}`;
 
+    sleepSprite.x = 50;
+    sleepSprite.y = -20;
 
+    app.stage.addChild(sleepSprite);
 }
 
 const renderNutrients = function() {
@@ -171,7 +236,7 @@ const renderNutrients = function() {
             fill: 0x101010,
             align: 'center',
         });
-        nutrientsLabel.position = {x: 820, y: 20};
+        nutrientsLabel.position = {x: 1320, y: 20};
         nutrientsLabel.name = 'nutrients';
         app.stage.addChild(nutrientsLabel);
     }
@@ -189,7 +254,7 @@ const renderRounds = function() {
             fill: 0x101010,
             align: 'center',
         });
-        roundsLabel.position = {x: 1320, y: 20};
+        roundsLabel.position = {x: 1020, y: 20};
         roundsLabel.name = 'rounds';
         app.stage.addChild(roundsLabel);
     }
@@ -301,6 +366,11 @@ const nextRound = function() {
     renderScorePoint();
     renderSunPoint();
     renderRounds();
+
+    isPlayer1Waiting = false;
+    isPlayer2Waiting = false;
+    currentPlayer = (currentRound + 1) % 2;
+    showWhoseMove();
 }
 
 const turnSunDirection = function() {
@@ -331,7 +401,6 @@ const convertSunPointsToScore = function() {
         const player = players[index];
         let addScore = Math.floor(player.sun / 3);
         player.score += addScore;
-        console.log('add score: ', addScore);
         player.sun %= 3;
     }
 }
@@ -384,7 +453,7 @@ const prepareBoard = function() {
 
         hexagon.eventMode = "static";
         hexagon.cursor = "pointer";
-        
+        hexagon.sortableChildren = true; 
         
         hexagon.onpointerdown = startCeed;
         hexagon.onpointerup = endCeed;
@@ -420,7 +489,7 @@ const plantDefaultTree = function(index, playerIndex) {
 }
 
 const clickHexagon = function(e) {
-    if (e.target.sleep == undefined) {
+    if (e.target.sleep == undefined && e.target.playerId == currentPlayer) {
         let treeSize = e.target.treeSize;
         switch (treeSize){
             case 0:
@@ -453,7 +522,29 @@ const growWithPrice = function(hexagon) {
         grow(hexagon);
         sleepTree(hexagon);
         addTreeDescription();
+        changePlayerTurn();
     }
+}
+
+const changePlayerTurn = function() {
+    currentPlayer = (currentPlayer + 1) % 2;
+
+    if (isPlayer1Waiting && isPlayer2Waiting) {
+        nextRound();
+        return;
+    }
+
+    if (currentPlayer == 0 && isPlayer1Waiting){
+        changePlayerTurn();
+        return;
+    } 
+
+    if (currentPlayer == 1 && isPlayer2Waiting){
+        changePlayerTurn();
+        return;
+    }
+
+    showWhoseMove();
 }
 
 const sleepTree = function(hexagon) {
@@ -481,6 +572,7 @@ const grow = function(hexagon) {
     let tree = PIXI.Sprite.from(treeImageUrl);
     tree.anchor.set(0.5);
     tree.name = 'tree';
+    tree.zIndex = 10;
 
     hexagon.addChild(tree);
 }
@@ -552,7 +644,8 @@ const endCeed = function(e) {
     let distance = getDistance(initialHexagon, e.target);
     if (initialHexagon.sleep == undefined &&
         distance > 0 && distance <= initialHexagon.treeSize &&
-        e.target.treeSize == undefined) {
+        e.target.treeSize == undefined &&
+        ceedingPlayerId == currentPlayer) {
         // Check that a player has sun points enough
         // Count current number of ceeds owned by the player
         let ceedPrice = getTreePrice(ceedingPlayerId, 0);
@@ -572,7 +665,9 @@ const endCeed = function(e) {
 
             sleepTree(initialHexagon);
             sleepTree(e.target);
-            addTreeDescription();            
+            addTreeDescription();
+            
+            changePlayerTurn();
         }
     }
 
@@ -612,7 +707,9 @@ const complete = function(hexagon) {
 
         hexagon.removeChildren();
         hexagon.treeSize = undefined;
-        hexagon.playerId = undefined;    
+        hexagon.playerId = undefined; 
+        
+        changePlayerTurn();
     }
 }
 
